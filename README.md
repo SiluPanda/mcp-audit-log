@@ -3,6 +3,7 @@
 Compliance-grade structured audit logging for MCP (Model Context Protocol) servers.
 
 [![npm version](https://img.shields.io/npm/v/mcp-audit-log.svg)](https://www.npmjs.com/package/mcp-audit-log)
+[![npm downloads](https://img.shields.io/npm/dt/mcp-audit-log.svg)](https://www.npmjs.com/package/mcp-audit-log)
 [![license](https://img.shields.io/npm/l/mcp-audit-log.svg)](https://github.com/SiluPanda/mcp-audit-log/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/mcp-audit-log.svg)](https://nodejs.org)
 
