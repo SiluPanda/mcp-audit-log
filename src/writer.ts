@@ -228,7 +228,7 @@ class FileSink implements InternalSink {
       const dst = `${this.filePath}.${i + 1}`;
       try {
         if (fs.existsSync(src)) {
-          if (i + 1 > this.maxFiles) {
+          if (i + 1 >= this.maxFiles) {
             fs.unlinkSync(src);
           } else {
             fs.renameSync(src, dst);

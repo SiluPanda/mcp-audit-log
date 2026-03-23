@@ -33,12 +33,14 @@ function truncateObject(
     const byteLength = Buffer.byteLength(obj, 'utf8');
     if (byteLength > maxSize) {
       onTruncate();
-      // Truncate by characters (conservative, since UTF-8 chars can be multi-byte)
+      const suffix = '...[truncated]';
+      const suffixLen = Buffer.byteLength(suffix, 'utf8');
+      const targetSize = Math.max(0, maxSize - suffixLen);
       let truncated = obj;
-      while (Buffer.byteLength(truncated, 'utf8') > maxSize && truncated.length > 0) {
-        truncated = truncated.slice(0, Math.floor(truncated.length * (maxSize / Buffer.byteLength(truncated, 'utf8'))));
+      while (Buffer.byteLength(truncated, 'utf8') > targetSize && truncated.length > 0) {
+        truncated = truncated.slice(0, Math.floor(truncated.length * (targetSize / Buffer.byteLength(truncated, 'utf8'))));
       }
-      return truncated + '...[truncated]';
+      return truncated + suffix;
     }
     return obj;
   }
