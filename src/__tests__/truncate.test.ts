@@ -85,4 +85,16 @@ describe('truncateRecord', () => {
     const result = truncateRecord(record, 50);
     expect('params' in result && result.params).toBeNull();
   });
+
+  it('truncated result including suffix does not exceed maxSize', () => {
+    const maxSize = 40;
+    const longText = 'x'.repeat(500);
+    const record = makeRecord({ text: longText });
+    const result = truncateRecord(record, maxSize);
+    const text = 'params' in result ? (result.params?.text as string) : '';
+    // The full truncated string (including '...[truncated]' suffix) must fit within maxSize
+    const byteLength = Buffer.byteLength(text, 'utf8');
+    expect(byteLength).toBeLessThanOrEqual(maxSize);
+    expect(text).toContain('...[truncated]');
+  });
 });

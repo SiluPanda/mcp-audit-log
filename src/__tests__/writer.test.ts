@@ -217,6 +217,44 @@ describe('NdjsonWriter', () => {
       const rotatedFiles = entries.filter((e) => e.startsWith('audit.log.'));
       expect(rotatedFiles.length).toBeLessThanOrEqual(2);
     });
+
+    it('deletes files beyond maxFiles during rotation', async () => {
+      const dir = tmpDir();
+      dirs.push(dir);
+      const filePath = path.join(dir, 'audit.log');
+      // maxFiles=3 means current + 2 backups (.1 and .2)
+      const writer = new NdjsonWriter(
+        { type: 'file', path: filePath },
+        console.error,
+        { immediate: true },
+        { maxFileSize: 30, maxFiles: 3 },
+      );
+
+      await writer.open();
+
+      // Write enough data to trigger many rotations (well past 3 files)
+      for (let i = 0; i < 50; i++) {
+        await writer.write(`{"r":${i},"pad":"${'z'.repeat(20)}"}\n`);
+      }
+
+      await writer.close();
+
+      // Current file must exist
+      expect(fs.existsSync(filePath)).toBe(true);
+
+      const entries = fs.readdirSync(dir);
+      const allLogFiles = entries.filter(
+        (e) => e === 'audit.log' || e.startsWith('audit.log.'),
+      );
+
+      // With maxFiles=3 we should have at most 3 total files (current + .1 + .2)
+      expect(allLogFiles.length).toBeLessThanOrEqual(3);
+
+      // .3, .4, etc. must NOT exist (off-by-one bug would leave .3)
+      expect(fs.existsSync(`${filePath}.3`)).toBe(false);
+      expect(fs.existsSync(`${filePath}.4`)).toBe(false);
+      expect(fs.existsSync(`${filePath}.5`)).toBe(false);
+    });
   });
 
   describe('stream sink', () => {
