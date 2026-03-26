@@ -595,6 +595,8 @@ Returns a deep clone with string fields exceeding `maxSize` bytes truncated to `
 | `includeBody` | `boolean` | `true` | Whether to include request/response bodies |
 | `maxFieldSize` | `number` | `1048576` (1 MiB) | Maximum size in bytes for any single field |
 | `onError` | `(error: Error) => void` | `console.error` | Error callback for write failures |
+| `correlationTtlMs` | `number` | `300000` (5 min) | TTL in ms for correlation map entries; stale entries are pruned to prevent memory leaks from unanswered requests |
+| `correlationMaxSize` | `number` | `10000` | Maximum pending correlations before TTL pruning is triggered |
 
 ### Sink Configurations
 

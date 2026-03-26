@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -755,6 +755,180 @@ describe('AuditLogger', () => {
 
       const records = readRecords(filePath);
       expect(records[0].serverName).toBe('unknown');
+    });
+  });
+
+  describe('correlation map TTL pruning', () => {
+    it('should prune stale correlation entries when map exceeds max size', async () => {
+      const dir = tmpDir();
+      dirs.push(dir);
+      const logger = new AuditLogger({
+        sink: { type: 'file', path: path.join(dir, 'audit.log') },
+        serverName: 'test',
+        buffer: { immediate: true },
+        correlationTtlMs: 1000,    // 1 second TTL
+        correlationMaxSize: 5,     // trigger pruning after 5 entries
+      });
+      await logger.open();
+
+      // Use fake timers to control time
+      vi.useFakeTimers();
+
+      try {
+        const baseTime = Date.now();
+
+        // Add 5 requests (no responses) — these will become stale
+        for (let i = 1; i <= 5; i++) {
+          vi.setSystemTime(baseTime);
+          logger.logRequest('ping', i, null);
+        }
+        expect(logger.getStats().pendingCorrelations).toBe(5);
+
+        // Advance time past the TTL
+        vi.setSystemTime(baseTime + 2000);
+
+        // Add a 6th request — this pushes size to 6, exceeding maxSize of 5,
+        // triggering pruning of the 5 stale entries
+        logger.logRequest('ping', 6, null);
+
+        // The 5 stale entries should be pruned, leaving only request 6
+        expect(logger.getStats().pendingCorrelations).toBe(1);
+      } finally {
+        vi.useRealTimers();
+        await logger.close();
+      }
+    });
+
+    it('should not prune entries that are still within TTL', async () => {
+      const dir = tmpDir();
+      dirs.push(dir);
+      const logger = new AuditLogger({
+        sink: { type: 'file', path: path.join(dir, 'audit.log') },
+        serverName: 'test',
+        buffer: { immediate: true },
+        correlationTtlMs: 5000,    // 5 second TTL
+        correlationMaxSize: 3,     // trigger pruning after 3 entries
+      });
+      await logger.open();
+
+      vi.useFakeTimers();
+
+      try {
+        const baseTime = Date.now();
+        vi.setSystemTime(baseTime);
+
+        // Add 3 requests
+        logger.logRequest('ping', 1, null);
+        logger.logRequest('ping', 2, null);
+        logger.logRequest('ping', 3, null);
+        expect(logger.getStats().pendingCorrelations).toBe(3);
+
+        // Advance time but stay within TTL
+        vi.setSystemTime(baseTime + 1000);
+
+        // Add a 4th — triggers pruning check but nothing is stale
+        logger.logRequest('ping', 4, null);
+
+        // All 4 entries should remain
+        expect(logger.getStats().pendingCorrelations).toBe(4);
+      } finally {
+        vi.useRealTimers();
+        await logger.close();
+      }
+    });
+
+    it('should not prune when map size is within threshold', async () => {
+      const dir = tmpDir();
+      dirs.push(dir);
+      const logger = new AuditLogger({
+        sink: { type: 'file', path: path.join(dir, 'audit.log') },
+        serverName: 'test',
+        buffer: { immediate: true },
+        correlationTtlMs: 100,
+        correlationMaxSize: 10000,  // high threshold
+      });
+      await logger.open();
+
+      vi.useFakeTimers();
+
+      try {
+        const baseTime = Date.now();
+        vi.setSystemTime(baseTime);
+
+        // Add a few requests — well under threshold
+        for (let i = 1; i <= 5; i++) {
+          logger.logRequest('ping', i, null);
+        }
+
+        // Advance past TTL
+        vi.setSystemTime(baseTime + 500);
+
+        // Add another — still under threshold so no pruning
+        logger.logRequest('ping', 6, null);
+        expect(logger.getStats().pendingCorrelations).toBe(6);
+      } finally {
+        vi.useRealTimers();
+        await logger.close();
+      }
+    });
+
+    it('should use default TTL and max size when not configured', async () => {
+      const dir = tmpDir();
+      dirs.push(dir);
+      const logger = new AuditLogger({
+        sink: { type: 'file', path: path.join(dir, 'audit.log') },
+        serverName: 'test',
+        buffer: { immediate: true },
+      });
+      await logger.open();
+
+      // Just verify defaults don't cause errors — add a few requests
+      for (let i = 1; i <= 10; i++) {
+        logger.logRequest('ping', i, null);
+      }
+      expect(logger.getStats().pendingCorrelations).toBe(10);
+
+      await logger.close();
+    });
+
+    it('should still allow logResponse for non-pruned entries after pruning', async () => {
+      const dir = tmpDir();
+      dirs.push(dir);
+      const filePath = path.join(dir, 'audit.log');
+      const logger = new AuditLogger({
+        sink: { type: 'file', path: filePath },
+        serverName: 'test',
+        buffer: { immediate: true },
+        correlationTtlMs: 500,
+        correlationMaxSize: 3,
+      });
+      await logger.open();
+
+      vi.useFakeTimers();
+
+      try {
+        const baseTime = Date.now();
+        vi.setSystemTime(baseTime);
+
+        // Add 3 old requests
+        logger.logRequest('ping', 1, null);
+        logger.logRequest('ping', 2, null);
+        logger.logRequest('ping', 3, null);
+
+        // Advance past TTL
+        vi.setSystemTime(baseTime + 1000);
+
+        // Add a fresh request (id=4) — triggers pruning of stale 1,2,3
+        logger.logRequest('ping', 4, null);
+        expect(logger.getStats().pendingCorrelations).toBe(1);
+
+        // The fresh entry (4) should still be matchable
+        logger.logResponse(4, { result: true }, null);
+        expect(logger.getStats().pendingCorrelations).toBe(0);
+      } finally {
+        vi.useRealTimers();
+        await logger.close();
+      }
     });
   });
 });
