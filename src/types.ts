@@ -129,6 +129,12 @@ export interface AuditLoggerOptions {
   maxFieldSize?: number;
   /** Error handler. Defaults to console.error. */
   onError?: (error: Error) => void;
+  /** TTL in ms for correlation map entries. Entries older than this are pruned
+   *  to prevent memory leaks from unanswered requests. Defaults to 300000 (5 minutes). */
+  correlationTtlMs?: number;
+  /** Maximum number of pending correlations before TTL pruning is triggered.
+   *  Defaults to 10000. */
+  correlationMaxSize?: number;
 }
 
 // ─── Audit Record Types ────────────────────────────────────────────

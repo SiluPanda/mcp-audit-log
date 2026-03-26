@@ -1,6 +1,6 @@
 {
   "name": "mcp-audit-log",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Structured audit logger for MCP tool calls",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

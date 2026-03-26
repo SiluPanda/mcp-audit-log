@@ -27,6 +27,8 @@ export class AuditLogger implements AuditLoggerHandle {
   private readonly includeBody: boolean;
   private readonly maxFieldSize: number;
   private readonly onError: (error: Error) => void;
+  private readonly correlationTtlMs: number;
+  private readonly correlationMaxSize: number;
   private _active = true;
   private _recordCount = 0;
   private _errorCount = 0;
@@ -39,6 +41,8 @@ export class AuditLogger implements AuditLoggerHandle {
     this.includeBody = options.includeBody ?? true;
     this.maxFieldSize = options.maxFieldSize ?? 1_048_576;
     this.onError = options.onError ?? ((err: Error) => console.error('[mcp-audit-log]', err.message));
+    this.correlationTtlMs = options.correlationTtlMs ?? 300_000;
+    this.correlationMaxSize = options.correlationMaxSize ?? 10_000;
 
     this.writer = new NdjsonWriter(
       options.sink,
@@ -96,6 +100,11 @@ export class AuditLogger implements AuditLoggerHandle {
       method,
       timestamp: Date.now(),
     });
+
+    // Prune stale entries to prevent memory leaks from unanswered requests
+    if (this.correlationMap.size > this.correlationMaxSize) {
+      this.pruneStaleCorrelations();
+    }
 
     this.writeRecord(record);
     return correlationId;
@@ -287,6 +296,15 @@ export class AuditLogger implements AuditLoggerHandle {
       active: this._active,
       pendingCorrelations: this.correlationMap.size,
     };
+  }
+
+  private pruneStaleCorrelations(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.correlationMap) {
+      if (now - entry.timestamp > this.correlationTtlMs) {
+        this.correlationMap.delete(key);
+      }
+    }
   }
 
   private writeRecord(record: AuditRecord): void {
